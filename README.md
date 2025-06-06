@@ -16,6 +16,7 @@
 - 🐧 **Debian-based** - Get a lightweight experience, while still having Bash
 - 🤝 **Key-based auth via ENV** - Grant access with the `AUTHORIZED_KEYS` environment variable
 - ⛔️ **Block IPs via ENV** - Block access with the `ALLOWED_IPS` environment variable
+- 🎯 **Restrict tunnel destinations via ENV** - Control tunnel destinations with the `ALLOWED_DEST` environment variable
 - 🔒 **Unprivileged user** - All SSH connections are made as an unprivileged user
 - 🔑 **Set your own PUID and PGID** - Have the PUID and PGID match your host user
 - 🔐 **Hardened SSH** - Prevent bot attacks and ensure quality security
@@ -34,6 +35,7 @@ All variables are documented here:
 
 **🔀 Variable Name**|**📚 Description**|**#️⃣ Default Value**
 :-----:|:-----:|:-----:
+ALLOWED_DEST|Restrict SSH tunnel destinations. Use space-separated `host:port` pairs, or special values `any` or `none` (see below)|`any` (unrestricted)
 ALLOWED_IPS| Content of allowed IP addresses (see below)| `AllowUsers tunnel` (allow the `tunnel` user from any IP) |
 AUTHORIZED_KEYS|🚨 <b>Required to be set by you.</b> Content of your authorized keys file (see below)|  |
 DEBUG|Display a bunch of helpful content for debugging.|false
@@ -61,7 +63,29 @@ Set this in the same context of [AllowUsers](https://www.ssh.com/academy/ssh/ssh
 ALLOWED_IPS="AllowUsers *@192.168.1.0/24 *@172.16.0.1 *@10.0.*.1"
 ```
 
-### 3. Forward your external port to `2222` on the container
+### 3. (Optional) Set your `ALLOWED_DEST` environment variable to restrict tunnel destinations
+You can control which destinations SSH tunnels can connect to by setting the `ALLOWED_DEST` environment variable:
+
+```bash
+# Allow tunneling to specific hosts and ports (space-separated)
+ALLOWED_DEST="database.local:3306 redis.local:6379 10.0.0.5:5432"
+
+# Allow tunneling to any port on specific hosts
+ALLOWED_DEST="database.local:* internal-api.local:*"
+
+# Disable all port forwarding
+ALLOWED_DEST="none"
+
+# Allow unrestricted port forwarding (default)
+ALLOWED_DEST="any"
+```
+
+This is particularly useful when you want to:
+- Limit SSH tunnels to only specific internal services (e.g., databases)
+- Prevent users from creating tunnels to external services
+- Create a "jump host" that only allows connections to specific destinations
+
+### 4. Forward your external port to `2222` on the container
 You can see I'm forwarding `12345` to `2222`.
 ```
 docker run --rm --name=ssh --network=web -p 12345:2222 localhost/ssh
@@ -74,7 +98,7 @@ ssh -p 12345 tunnel@myserver.test
 # Working example with MariaDB + SSH + Docker Swarm
 Here's a perfect example how you can use it with MariaDB. This allows you to use Sequel Pro or TablePlus to connect securely into your database server 🥳
 
-### Example using `ALLOWED_IPS` variable:
+### Example using `ALLOWED_IPS` and `ALLOWED_DEST` variables:
 ```yaml
 services:
   mariadb:
@@ -98,6 +122,8 @@ services:
          # End Keys"
       # Lock down the access to certain IP addresses
       ALLOWED_IPS: "AllowUsers tunnel@1.2.3.4"
+      # Only allow tunnels to the MariaDB service
+      ALLOWED_DEST: "mariadb:3306"
     networks:
         - database
 

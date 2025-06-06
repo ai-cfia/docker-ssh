@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # SSH server with unrestricted tunneling (default behavior)
+  ssh-unrestricted:
+    build:
+      context: ../src
+      dockerfile: Dockerfile.test
+    container_name: ssh-unrestricted
+    ports:
+      - "41222:2222"
+    env_file:
+      - .env.ssh
+    environment:
+      # Allow connections from any IP (for testing)
+      ALLOWED_IPS: "AllowUsers tunnel"
+      # Allow tunneling to any destination (default)
+      ALLOWED_DEST: "any"
+      DEBUG: "true"
+    networks:
+      - test-network
+    volumes:
+      - ssh_host_keys:/etc/ssh/ssh_host_keys
+
+  # SSH server with restricted tunneling to nginx only
+  ssh-restricted:
+    build:
+      context: ../src
+      dockerfile: Dockerfile.test
+    container_name: ssh-restricted
+    ports:
+      - "41223:2222"
+    env_file:
+      - .env.ssh
+    environment:
+      ALLOWED_IPS: "AllowUsers tunnel"
+      # Only allow tunneling to nginx service
+      ALLOWED_DEST: "nginx:80"
+      DEBUG: "true"
+    networks:
+      - test-network
+    volumes:
+      - ssh_host_keys_restricted:/etc/ssh/ssh_host_keys
+
+  # SSH server with tunneling completely disabled
+  ssh-no-tunnels:
+    build:
+      context: ../src
+      dockerfile: Dockerfile.test
+    container_name: ssh-no-tunnels
+    ports:
+      - "41224:2222"
+    env_file:
+      - .env.ssh
+    environment:
+      ALLOWED_IPS: "AllowUsers tunnel"
+      # Disable all port forwarding
+      ALLOWED_DEST: "none"
+      DEBUG: "true"
+    networks:
+      - test-network
+    volumes:
+      - ssh_host_keys_none:/etc/ssh/ssh_host_keys
+
+  # SSH server with wildcard port restrictions
+  ssh-wildcard:
+    build:
+      context: ../src
+      dockerfile: Dockerfile.test
+    container_name: ssh-wildcard
+    ports:
+      - "41225:2222"
+    env_file:
+      - .env.ssh
+    environment:
+      ALLOWED_IPS: "AllowUsers tunnel"
+      # Allow any port on nginx host
+      ALLOWED_DEST: "nginx:*"
+      DEBUG: "true"
+    networks:
+      - test-network
+    volumes:
+      - ssh_host_keys_wildcard:/etc/ssh/ssh_host_keys
+
+  # Simple web service for testing HTTP tunneling
+  nginx:
+    image: nginx:alpine
+    container_name: test-nginx
+    ports:
+      - "41081:80"  # Exposed for direct access comparison
+    networks:
+      - test-network
+    volumes:
+      - ./test-nginx.conf:/etc/nginx/nginx.conf:ro
+
+networks:
+  test-network:
+    driver: bridge
+
+volumes:
+  ssh_host_keys:
+  ssh_host_keys_restricted:
+  ssh_host_keys_none:
+  ssh_host_keys_wildcard: 

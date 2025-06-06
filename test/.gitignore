@@ -1,0 +1,14 @@
+# SSH test keys (auto-generated)
+keys/
+*.key
+*.pub
+
+# Environment files (contain sensitive data)
+.env*
+
+# Docker volumes
+docker-compose.override.yml
+
+# Temporary files
+*.tmp
+*.tmp2 

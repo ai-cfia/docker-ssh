@@ -31,6 +31,29 @@ validate_allowed_ips() {
     fi
 }
 
+validate_allowed_destinations() {
+    local dests="$1"
+    # Validate PermitOpen format: host:port or IP:port
+    # Allow multiple destinations separated by spaces
+    # Format: hostname:port, IP:port, or special values like "any" or "none"
+    if [ "$dests" = "any" ] || [ "$dests" = "none" ]; then
+        return 0
+    fi
+    
+    # Check each destination
+    echo "$dests" | tr ' ' '\n' | while read -r dest; do
+        if [ -n "$dest" ]; then
+            # Check if it matches hostname:port or IP:port pattern
+            if ! echo "$dest" | grep -E '^[a-zA-Z0-9.-]+:[0-9*]+$|^\*:[0-9*]+$|^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9*]+$|^\[[0-9a-fA-F:]+\]:[0-9*]+$'; then
+                echo "Invalid ALLOWED_DEST format: $dest"
+                echo "Expected format: hostname:port, IP:port, *:port, or special values 'any' or 'none'"
+                return 1
+            fi
+        fi
+    done
+    return 0
+}
+
 ######################################################
 # Main
 ######################################################
@@ -157,6 +180,37 @@ else
     echo "${ALLOWED_IPS}" >> /etc/ssh/sshd_config.d/custom.conf
 fi
 
+# Configure allowed tunnel destinations
+if [ -n "${ALLOWED_DEST}" ]; then
+    echo "🚀 Configuring allowed tunnel destinations..."
+    
+    # Validate the destinations
+    if ! validate_allowed_destinations "${ALLOWED_DEST}"; then
+        echo "🚨🚨🚨 CONFIGURATION ERROR:"
+        echo "Invalid ALLOWED_DEST format."
+        exit 1
+    fi
+    
+    # Configure PermitOpen based on ALLOWED_DEST
+    if [ "${ALLOWED_DEST}" = "none" ]; then
+        echo "🔒 Disabling all port forwarding..."
+        echo "PermitOpen none" >> /etc/ssh/sshd_config.d/custom.conf
+    elif [ "${ALLOWED_DEST}" = "any" ]; then
+        echo "🌐 Allowing port forwarding to any destination..."
+        # No need to add PermitOpen directive, default is to allow all
+    else
+        echo "🎯 Restricting port forwarding to specific destinations..."
+        # Add each destination as a separate PermitOpen line
+        echo "${ALLOWED_DEST}" | tr ' ' '\n' | while read -r dest; do
+            if [ -n "$dest" ]; then
+                echo "PermitOpen $dest" >> /etc/ssh/sshd_config.d/custom.conf
+            fi
+        done
+    fi
+else
+    echo "ℹ️  No tunnel destination restrictions configured (ALLOWED_DEST not set)"
+fi
+
 # Setup authorized keys
 mkdir -p "${ssh_user_home}/.ssh/"
 
@@ -206,6 +260,17 @@ echo "🎨 Creating custom MOTD..."
     echo
     echo '\033[1;35m🔒 Security:\033[0m'
     echo "   • Allowed Users & IPs: ${ALLOWED_IPS}"
+    if [ -n "${ALLOWED_DEST}" ]; then
+        if [ "${ALLOWED_DEST}" = "none" ]; then
+            echo "   • Tunnel Destinations: Disabled"
+        elif [ "${ALLOWED_DEST}" = "any" ]; then
+            echo "   • Tunnel Destinations: Unrestricted"
+        else
+            echo "   • Tunnel Destinations: ${ALLOWED_DEST}"
+        fi
+    else
+        echo "   • Tunnel Destinations: Unrestricted"
+    fi
     echo "   • Root Login: Disabled by default"
     echo "   • Password Auth: Disabled by default"
     echo
